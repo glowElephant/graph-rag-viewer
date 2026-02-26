@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="utf-8">
+    <title>GraphRAG 3D Viewer</title>
+    <script src="graph-data.js"></script>
+    <script src="//unpkg.com/3d-force-graph"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #1a1a2e; overflow: hidden; font-family: sans-serif; }
+        #graph { width: 100vw; height: 100vh; }
+
+        #legend {
+            position: fixed; top: 10px; left: 10px;
+            background: rgba(0,0,0,0.8); padding: 15px;
+            border-radius: 8px; z-index: 1000; color: white;
+            max-height: 90vh; overflow-y: auto;
+        }
+        #legend h3 { margin: 0 0 8px 0; font-size: 14px; }
+        #legend .item { margin: 3px 0; font-size: 12px; display: flex; align-items: center; gap: 8px; }
+        #legend .dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+        #legend .line { width: 20px; height: 2px; flex-shrink: 0; }
+        #legend hr { border: none; border-top: 1px solid #444; margin: 8px 0; }
+
+        #info {
+            position: fixed; bottom: 10px; left: 10px;
+            background: rgba(0,0,0,0.8); padding: 10px 15px;
+            border-radius: 8px; color: #aaa; font-size: 12px;
+            z-index: 1000;
+        }
+
+        #tooltip {
+            position: fixed; padding: 8px 12px;
+            background: rgba(0,0,0,0.9); color: white;
+            border-radius: 6px; font-size: 12px;
+            pointer-events: none; z-index: 2000;
+            display: none; max-width: 350px;
+            white-space: pre-wrap; line-height: 1.4;
+        }
+
+        #nav-link {
+            position: fixed; top: 10px; right: 10px;
+            z-index: 1000;
+        }
+        #nav-link a {
+            color: #aaa; text-decoration: none; font-size: 13px;
+            background: rgba(0,0,0,0.8); padding: 8px 14px;
+            border-radius: 6px;
+        }
+        #nav-link a:hover { color: white; }
+    </style>
+</head>
+<body>
+    <div id="legend">
+        <h3>노드 유형</h3>
+        <div class="item"><span class="dot" style="background:#4FC3F7"></span>class</div>
+        <div class="item"><span class="dot" style="background:#81C784"></span>field</div>
+        <div class="item"><span class="dot" style="background:#FFB74D"></span>shader</div>
+        <div class="item"><span class="dot" style="background:#BA68C8"></span>component</div>
+        <div class="item"><span class="dot" style="background:#90A4AE"></span>file</div>
+        <div class="item"><span class="dot" style="background:#EF5350"></span>error</div>
+        <div class="item"><span class="dot" style="background:#26C6DA"></span>feature</div>
+        <div class="item"><span class="dot" style="background:#66BB6A"></span>solution</div>
+        <div class="item"><span class="dot" style="background:#FFF176"></span>enum</div>
+        <div class="item"><span class="dot" style="background:#CE93D8"></span>interface</div>
+        <div class="item"><span class="dot" style="background:#FFCC80"></span>material</div>
+        <hr>
+        <h3>관계 유형</h3>
+        <div class="item"><span class="line" style="background:#F44336"></span>depends_on</div>
+        <div class="item"><span class="line" style="background:#4CAF50"></span>has_field</div>
+        <div class="item"><span class="line" style="background:#FF9800"></span>requires</div>
+        <div class="item"><span class="line" style="background:#2196F3"></span>uses</div>
+        <div class="item"><span class="line" style="background:#9C27B0"></span>inherits</div>
+        <div class="item"><span class="line" style="background:#00BCD4"></span>controls</div>
+        <div class="item"><span class="line" style="background:#8BC34A"></span>solved_by</div>
+        <div class="item"><span class="line" style="background:#F44336"></span>caused_by</div>
+        <div class="item"><span class="line" style="background:#607D8B"></span>related_to</div>
+        <div class="item"><span class="line" style="background:#FF5722"></span>modified</div>
+    </div>
+
+    <div id="nav-link"><a href="index.html">← 2D Viewer</a></div>
+    <div id="info"></div>
+    <div id="tooltip"></div>
+    <div id="graph"></div>
+
+    <script>
+        // vis-network → 3d-force-graph 데이터 변환
+        const nodes = GRAPH_NODES.map(n => ({
+            id: n.id,
+            name: n.label,
+            color: n.color,
+            val: n.size / 10,
+            desc: n.title || ''
+        }));
+
+        const links = GRAPH_EDGES.map(e => ({
+            source: e.from,
+            target: e.to,
+            label: e.label || '',
+            color: (typeof e.color === 'object') ? (e.color.color || '#666') : (e.color || '#666')
+        }));
+
+        document.getElementById('info').textContent =
+            'Nodes: ' + nodes.length + ' | Edges: ' + links.length + ' | 마우스 드래그: 회전, 스크롤: 줌, 노드 호버: 상세 정보';
+
+        const tooltip = document.getElementById('tooltip');
+
+        const Graph = ForceGraph3D()(document.getElementById('graph'))
+            .graphData({ nodes, links })
+            .backgroundColor('#1a1a2e')
+            .nodeColor(n => n.color)
+            .nodeVal(n => n.val)
+            .nodeLabel('')
+            .linkColor(l => l.color)
+            .linkWidth(0.3)
+            .linkOpacity(0.4)
+            .linkDirectionalArrowLength(3)
+            .linkDirectionalArrowRelPos(1)
+            .d3AlphaDecay(0.04)
+            .d3VelocityDecay(0.3)
+            .warmupTicks(100)
+            .cooldownTicks(200)
+            .onNodeHover(node => {
+                document.body.style.cursor = node ? 'pointer' : 'default';
+                if (node) {
+                    tooltip.style.display = 'block';
+                    tooltip.textContent = node.desc || node.name;
+                } else {
+                    tooltip.style.display = 'none';
+                }
+            })
+            .onNodeClick(node => {
+                // 클릭 시 카메라를 노드 쪽으로 이동
+                const distance = 120;
+                const distRatio = 1 + distance / Math.hypot(node.x, node.y, node.z);
+                Graph.cameraPosition(
+                    { x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio },
+                    node,
+                    1500
+                );
+            });
+
+        // 마우스 위치 추적 (툴팁 위치)
+        document.addEventListener('mousemove', e => {
+            tooltip.style.left = (e.clientX + 15) + 'px';
+            tooltip.style.top = (e.clientY + 15) + 'px';
+        });
+    </script>
+</body>
+</html>

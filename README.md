@@ -2,6 +2,11 @@
 
 빌더 조쉬의 ["RAG 어렵다고요?"](https://www.youtube.com/watch?v=AISuJHMCWog) 영상을 시작점으로, RAG/GraphRAG를 학습하고 **Claude Code용 하이브리드 RAG 시스템**을 구축한 프로젝트.
 
+## 지식 그래프 뷰어
+
+- **[2D Viewer](https://glowelephant.github.io/graph-rag-viewer/)** — vis-network 기반
+- **[3D Viewer](https://glowelephant.github.io/graph-rag-viewer/3d.html)** — 3d-force-graph 기반 (WebGL)
+
 ## 이 프로젝트가 하는 일
 
 Claude Code에서 질문하면 **과거 세션 이력, 프로젝트 코드, 문서, 지식 그래프**에서 자동으로 관련 정보를 찾아서 답변에 활용합니다.
