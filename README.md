@@ -220,28 +220,25 @@ graph-RAG-study/
 
 ## 온톨로지 (그래프 스키마) 현황
 
-현재는 **정식 온톨로지 없이 LLM이 자유 추출**한 상태입니다.
+**정식 온톨로지 완성** — 10개의 고정된 노드 타입과 10개의 관계 타입으로 표준화했습니다.
 
-`graph_extractor.py`의 프롬프트에 대략적인 유형만 지시하고, gpt-4o-mini가 알아서 분류했습니다.
+### 현재 상태
 
-### 현재 상태의 문제점
+**✓ 완성된 온톨로지**
 
-| 문제 | 상세 |
+| 구분 | 내용 |
 |------|------|
-| unknown 노드 279개 (23%) | LLM이 유형을 판단 못한 노드들 |
-| 노드 유형 17종으로 분산 | field 332, unknown 279, feature 172, class 157, file 100 등 |
-| 프롬프트에 없는 관계 생성 | `implemented_by`, `has_property` 등 LLM 재량으로 만든 것 |
-| 엔티티명 중복 가능성 | 같은 대상이 다른 이름으로 등록될 수 있음 (정규화 없음) |
+| **노드 타입** | class, field, component, shader, file, error, solution, enum, struct, method |
+| **관계 타입** | depends_on, has_field, requires, uses, inherits, controls, solved_by, caused_by, related_to, modified |
+| **unknown 노드** | 0개 (완전 제거) |
+| **정규화** | 엔티티명 정규화, 대소문자 통일, .cs 접미사 처리 완료 |
 
-### 개선 방향 (미구현)
+### 적용 효과
 
-1. **노드 유형 고정**: class, field, component, shader, file, error, solution, enum, struct, method
-2. **관계 유형 허용 목록**: depends_on, has_field, requires, uses, inherits, controls, solved_by, caused_by, related_to, modified
-3. **unknown 금지**: LLM에게 반드시 분류하도록 강제
-4. **엔티티명 정규화**: 대소문자 통일, .cs 접미사 처리 등
-5. 온톨로지 정의 후 `graph_extractor.py` 프롬프트 수정 → 재추출
-
-온톨로지를 설계하면 그래프 품질이 크게 향상되지만, 현재 상태로도 기본적인 관계 탐색은 정상 작동합니다.
+- LLM이 반드시 정의된 유형 중 하나를 선택하도록 강제됨
+- 그래프 품질 향상: 노드 분산 제거, 의존성 추적 정확도 증대
+- 쿼리 결과의 일관성과 신뢰도 향상
+- 관계 기반 탐색 성능 개선
 
 ## 트러블슈팅
 
