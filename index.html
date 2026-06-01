@@ -61,6 +61,7 @@
     import Graph from "https://esm.sh/graphology@0.25";
     import Sigma from "https://esm.sh/sigma@3";
     import forceAtlas2 from "https://esm.sh/graphology-layout-forceatlas2@0.10";
+    import FA2Layout from "https://esm.sh/graphology-layout-forceatlas2@0.10/worker";
 
     const $stats = document.getElementById('stats-body');
     const $detail = document.getElementById('detail');
@@ -103,21 +104,17 @@
       `<span class="badge">${graph.size}</span> edges<br>` +
       `<span class="muted">layouting (ForceAtlas2)…</span>`;
 
-    // ForceAtlas2: 9.5k 노드를 빠르게 펼침. iterations 작게 (60), Barnes-Hut 켜기.
     setTimeout(() => {
+      // 1) 초기 빠른 펼치기 (정적 60 iter)
       forceAtlas2.assign(graph, {
         iterations: 60,
         settings: {
-          gravity: 1,
-          scalingRatio: 10,
-          slowDown: 4,
-          barnesHutOptimize: true,
-          barnesHutTheta: 0.6,
-          strongGravityMode: false,
+          gravity: 1, scalingRatio: 10, slowDown: 4,
+          barnesHutOptimize: true, barnesHutTheta: 0.6,
         },
       });
 
-      // Sigma 초기화 — WebGL2 자동 사용
+      // 2) Sigma 렌더러
       const renderer = new Sigma(graph, container, {
         renderEdgeLabels: false,
         defaultEdgeColor: 'rgba(120,140,180,0.25)',
@@ -125,12 +122,22 @@
         labelSize: 11,
         labelWeight: '400',
         renderLabels: true,
-        labelRenderedSizeThreshold: 8, // 작은 노드 label 안 그림 → 속도 ↑
+        labelRenderedSizeThreshold: 8,
         zIndex: true,
         minCameraRatio: 0.05,
         maxCameraRatio: 10,
       });
 
+      // 3) Web Worker로 continuous simulation — 노드들이 살아 움직임
+      const layout = new FA2Layout(graph, {
+        settings: {
+          gravity: 1, scalingRatio: 10, slowDown: 8,
+          barnesHutOptimize: true, barnesHutTheta: 0.6,
+        },
+      });
+      layout.start();
+
+      // 노드 클릭 → detail
       renderer.on('clickNode', ({ node }) => {
         const attrs = graph.getNodeAttributes(node);
         $detailTitle.textContent = attrs.label;
@@ -139,12 +146,58 @@
       });
       renderer.on('clickStage', () => { $detail.style.display = 'none'; });
 
+      // 4) 노드 drag — drag 중엔 worker 일시 정지
+      let dragged = null;
+      renderer.on('downNode', ({ node }) => {
+        dragged = node;
+        graph.setNodeAttribute(node, 'highlighted', true);
+        layout.stop();
+      });
+      const captor = renderer.getMouseCaptor();
+      captor.on('mousemovebody', (e) => {
+        if (!dragged) return;
+        const pos = renderer.viewportToGraph(e);
+        graph.setNodeAttribute(dragged, 'x', pos.x);
+        graph.setNodeAttribute(dragged, 'y', pos.y);
+        e.preventSigmaDefault?.();
+        e.original?.preventDefault?.();
+        e.original?.stopPropagation?.();
+      });
+      const release = () => {
+        if (dragged) {
+          graph.removeNodeAttribute(dragged, 'highlighted');
+          dragged = null;
+          layout.start();
+        }
+      };
+      captor.on('mouseup', release);
+      captor.on('mouseleave', release);
+
+      // 5) Play/Pause 토글 + 30초 후 자동 정지 (CPU 절약)
+      let autoStopped = false;
+      setTimeout(() => {
+        if (!autoStopped && layout.isRunning()) {
+          layout.stop();
+          autoStopped = true;
+          $stats.querySelector('.muted').textContent =
+            'simulation paused (30s elapsed). press space to resume.';
+        }
+      }, 30000);
+      window.addEventListener('keydown', (e) => {
+        if (e.code === 'Space') {
+          e.preventDefault();
+          if (layout.isRunning()) { layout.stop(); }
+          else { layout.start(); autoStopped = false; }
+        }
+      });
+
       const elapsed = (performance.now() - t0).toFixed(0);
       $stats.innerHTML =
         `<span class="badge">${graph.order}</span> nodes ` +
         `<span class="badge">${graph.size}</span> edges<br>` +
-        `<span class="muted">sigma.js WebGL · ready in ${elapsed}ms · click any node · drag/wheel for nav</span>`;
+        `<span class="muted">sigma.js · ${elapsed}ms · drag/wheel · click node · space=pause/play</span>`;
       window.__sigma = renderer;
+      window.__layout = layout;
     }, 0);
 
     window.addEventListener('keydown', (e) => {
