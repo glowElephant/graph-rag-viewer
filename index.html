@@ -2,18 +2,19 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8">
-  <title>GraphRAG Viewer · Cosmograph</title>
+  <title>GraphRAG Viewer · sigma.js v3</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
     *, *::before, *::after { box-sizing: border-box; }
-    html, body { margin: 0; padding: 0; height: 100%; background: #050608; color: #e7e9ee;
-      font: 13px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans KR", sans-serif; }
-    #graph { position: absolute; inset: 0; }
+    html, body { margin: 0; padding: 0; height: 100%; width: 100%; background: #050608; color: #e7e9ee;
+      font: 13px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
+      overflow: hidden; }
+    #graph { position: absolute; inset: 0; width: 100vw; height: 100vh; }
 
     .panel {
       position: absolute; padding: 10px 14px; border-radius: 8px;
       background: rgba(12, 14, 18, 0.78); backdrop-filter: blur(8px);
-      border: 1px solid rgba(255,255,255,0.06); max-width: 360px;
+      border: 1px solid rgba(255,255,255,0.06); max-width: 360px; z-index: 10;
     }
     #stats { top: 14px; left: 14px; }
     #detail { bottom: 14px; left: 14px; max-height: 40vh; overflow: auto; display: none; }
@@ -56,101 +57,95 @@
 
   <script src="graph-data.js"></script>
   <script type="module">
-    // v1 pin — v2는 prepareCosmographData/PointColorStrategy 객체 API로 바뀌어서 vanilla string-key 비호환
-    import { Cosmograph } from "https://esm.sh/@cosmograph/cosmograph@1";
+    // sigma.js v3 + graphology — vanilla WebGL 2D 그래프 표준, 10k+ 노드 검증
+    import Graph from "https://esm.sh/graphology@0.25";
+    import Sigma from "https://esm.sh/sigma@3";
+    import forceAtlas2 from "https://esm.sh/graphology-layout-forceatlas2@0.10";
 
     const $stats = document.getElementById('stats-body');
     const $detail = document.getElementById('detail');
     const $detailTitle = document.getElementById('detail-title');
     const $detailBody = document.getElementById('detail-body');
+    const container = document.getElementById('graph');
 
     const t0 = performance.now();
 
-    // vis-network 형식 → Cosmograph 형식
-    const nodes = GRAPH_NODES.map(n => ({
-      id: n.id,
-      label: n.label,
-      color: n.color || '#4FC3F7',
-      sz: Math.max(2, Math.sqrt(n.size || 8) * 1.1),
-      title: n.title || '',
-    }));
-    const links = GRAPH_EDGES.map(e => ({
-      source: e.from,
-      target: e.to,
-      color: e.color || 'rgba(120,140,180,0.35)',
-      label: e.label || '',
-    }));
-
-    const tParse = (performance.now() - t0).toFixed(0);
-    $stats.innerHTML =
-      `<span class="badge">${nodes.length}</span> nodes ` +
-      `<span class="badge">${links.length}</span> edges<br>` +
-      `<span class="muted">parsed in ${tParse}ms · initializing GPU…</span>`;
-
-    const container = document.getElementById('graph');
-
-    // Cosmograph v1 API: accessor 함수로 prop
-    const graph = new Cosmograph(container, {
-      nodes,
-      links,
-      nodeColor: n => n.color,
-      nodeSize: n => n.sz,
-      nodeLabelAccessor: n => n.label,
-      linkColor: l => l.color,
-      linkWidth: 0.4,
-      linkArrows: false,
-      backgroundColor: '#050608',
-
-      // simulation tuning — 9.5k nodes / 12k edges에 맞춤
-      simulationRepulsion: 0.5,
-      simulationLinkSpring: 1.2,
-      simulationLinkDistance: 6,
-      simulationGravity: 0.15,
-      simulationFriction: 0.88,
-      simulationDecay: 1500,
-
-      // 상위 N개 label만 (텍스트 렌더가 가장 느림)
-      showDynamicLabels: true,
-      showTopLabels: true,
-      showTopLabelsLimit: 30,
-      fitViewOnInit: true,
-      fitViewPadding: 0.2,
-
-      onClick: (node) => {
-        if (!node) { $detail.style.display = 'none'; return; }
-        $detailTitle.textContent = node.label;
-        $detailBody.textContent = node.title || '(no description)';
-        $detail.style.display = 'block';
-      },
+    // graphology 그래프 구축
+    const graph = new Graph({ multi: true });
+    const validIds = new Set();
+    GRAPH_NODES.forEach(n => {
+      if (graph.hasNode(n.id)) return;
+      validIds.add(n.id);
+      graph.addNode(n.id, {
+        label: n.label || n.id,
+        color: n.color || '#4FC3F7',
+        size: Math.max(2, Math.sqrt(n.size || 8) * 0.9),
+        // 초기 random 위치 — ForceAtlas2가 펼쳐줌
+        x: Math.random() * 100 - 50,
+        y: Math.random() * 100 - 50,
+        title: n.title || '',
+      });
     });
-
-    // 핵심 fix: Cosmograph가 init 시 container 사이즈 0으로 잡는 경우 강제 resize
-    function forceResize() {
-      const canvas = container.querySelector('canvas');
-      if (canvas) {
-        const dpr = window.devicePixelRatio || 1;
-        canvas.width = container.clientWidth * dpr;
-        canvas.height = container.clientHeight * dpr;
-        canvas.style.width = container.clientWidth + 'px';
-        canvas.style.height = container.clientHeight + 'px';
+    let skipped = 0;
+    GRAPH_EDGES.forEach(e => {
+      if (validIds.has(e.from) && validIds.has(e.to)) {
+        graph.addEdge(e.from, e.to, {
+          color: e.color || 'rgba(120,140,180,0.25)',
+          size: 0.5,
+        });
+      } else {
+        skipped++;
       }
-      window.dispatchEvent(new Event('resize'));
-      try { graph.fitView?.(700); } catch(e) {}
-    }
-    requestAnimationFrame(() => requestAnimationFrame(forceResize));
-    setTimeout(forceResize, 500);
-    setTimeout(forceResize, 2000);
-    window.addEventListener('resize', () => {
-      try { graph.fitView?.(300); } catch(e) {}
     });
 
+    $stats.innerHTML =
+      `<span class="badge">${graph.order}</span> nodes ` +
+      `<span class="badge">${graph.size}</span> edges<br>` +
+      `<span class="muted">layouting (ForceAtlas2)…</span>`;
+
+    // ForceAtlas2: 9.5k 노드를 빠르게 펼침. iterations 작게 (60), Barnes-Hut 켜기.
     setTimeout(() => {
+      forceAtlas2.assign(graph, {
+        iterations: 60,
+        settings: {
+          gravity: 1,
+          scalingRatio: 10,
+          slowDown: 4,
+          barnesHutOptimize: true,
+          barnesHutTheta: 0.6,
+          strongGravityMode: false,
+        },
+      });
+
+      // Sigma 초기화 — WebGL2 자동 사용
+      const renderer = new Sigma(graph, container, {
+        renderEdgeLabels: false,
+        defaultEdgeColor: 'rgba(120,140,180,0.25)',
+        labelColor: { color: '#aaa' },
+        labelSize: 11,
+        labelWeight: '400',
+        renderLabels: true,
+        labelRenderedSizeThreshold: 8, // 작은 노드 label 안 그림 → 속도 ↑
+        zIndex: true,
+        minCameraRatio: 0.05,
+        maxCameraRatio: 10,
+      });
+
+      renderer.on('clickNode', ({ node }) => {
+        const attrs = graph.getNodeAttributes(node);
+        $detailTitle.textContent = attrs.label;
+        $detailBody.textContent = attrs.title || '(no description)';
+        $detail.style.display = 'block';
+      });
+      renderer.on('clickStage', () => { $detail.style.display = 'none'; });
+
       const elapsed = (performance.now() - t0).toFixed(0);
       $stats.innerHTML =
-        `<span class="badge">${nodes.length}</span> nodes ` +
-        `<span class="badge">${links.length}</span> edges<br>` +
-        `<span class="muted">GPU · ready in ${elapsed}ms · click any node</span>`;
-    }, 2500);
+        `<span class="badge">${graph.order}</span> nodes ` +
+        `<span class="badge">${graph.size}</span> edges<br>` +
+        `<span class="muted">sigma.js WebGL · ready in ${elapsed}ms · click any node · drag/wheel for nav</span>`;
+      window.__sigma = renderer;
+    }, 0);
 
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') $detail.style.display = 'none';
