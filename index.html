@@ -17,7 +17,9 @@
     }
     #stats { top: 14px; left: 14px; }
     #detail { bottom: 14px; left: 14px; max-height: 40vh; overflow: auto; display: none; }
-    #links { top: 14px; right: 14px; display: flex; gap: 8px; }
+    #links {
+      position: absolute; top: 14px; right: 14px; display: flex; gap: 8px; z-index: 10;
+    }
     .link {
       background: #161922; color: #888; padding: 6px 12px; border-radius: 6px;
       text-decoration: none; font-size: 11px; border: 1px solid rgba(255,255,255,0.06);
@@ -86,17 +88,19 @@
 
     const container = document.getElementById('graph');
 
+    // Cosmograph v2 API: nodeXxx → pointXxx, accessor 대신 데이터 키 이름 지정
     const graph = new Cosmograph(container, {
       nodes,
       links,
-      nodeColor: n => n.color,
-      nodeSize: n => n.sz,
-      linkColor: l => l.color,
+      pointColor: 'color',
+      pointSize: 'sz',
+      pointLabel: 'label',
+      linkColor: 'color',
       linkWidth: 0.4,
       linkArrows: false,
       backgroundColor: '#050608',
 
-      // simulation tuning — 9.5k nodes / 24k edges에 맞춤
+      // simulation tuning — 9.5k nodes / 12k edges에 맞춤
       simulationRepulsion: 0.5,
       simulationLinkSpring: 1.2,
       simulationLinkDistance: 6,
@@ -104,11 +108,12 @@
       simulationFriction: 0.88,
       simulationDecay: 1500,
 
-      // labels: 너무 많이 그리면 느려져서 상위 N개 + hover만
+      // 상위 N개 label만 (텍스트 렌더가 가장 느림)
       showDynamicLabels: true,
       showTopLabels: true,
       showTopLabelsLimit: 30,
-      nodeLabelAccessor: n => n.label,
+      fitViewOnInit: true,
+      fitViewPadding: 0.2,
 
       onClick: (node) => {
         if (!node) { $detail.style.display = 'none'; return; }
@@ -117,6 +122,9 @@
         $detail.style.display = 'block';
       },
     });
+
+    // 안전망: 일정 시간 후 강제 fit
+    setTimeout(() => { try { graph.fitView(700); } catch(e){} }, 3000);
 
     setTimeout(() => {
       const elapsed = (performance.now() - t0).toFixed(0);
