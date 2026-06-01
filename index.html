@@ -56,7 +56,8 @@
 
   <script src="graph-data.js"></script>
   <script type="module">
-    import { Cosmograph } from "https://esm.sh/@cosmograph/cosmograph";
+    // v1 pin — v2는 prepareCosmographData/PointColorStrategy 객체 API로 바뀌어서 vanilla string-key 비호환
+    import { Cosmograph } from "https://esm.sh/@cosmograph/cosmograph@1";
 
     const $stats = document.getElementById('stats-body');
     const $detail = document.getElementById('detail');
@@ -88,14 +89,14 @@
 
     const container = document.getElementById('graph');
 
-    // Cosmograph v2 API: nodeXxx → pointXxx, accessor 대신 데이터 키 이름 지정
+    // Cosmograph v1 API: accessor 함수로 prop
     const graph = new Cosmograph(container, {
       nodes,
       links,
-      pointColor: 'color',
-      pointSize: 'sz',
-      pointLabel: 'label',
-      linkColor: 'color',
+      nodeColor: n => n.color,
+      nodeSize: n => n.sz,
+      nodeLabelAccessor: n => n.label,
+      linkColor: l => l.color,
       linkWidth: 0.4,
       linkArrows: false,
       backgroundColor: '#050608',
@@ -123,8 +124,8 @@
       },
     });
 
-    // 안전망: 일정 시간 후 강제 fit
-    setTimeout(() => { try { graph.fitView(700); } catch(e){} }, 3000);
+    // 안전망: simulation 정착 후 강제 fit
+    setTimeout(() => { try { graph.fitView(700); } catch(e) { console.warn('fitView:', e); } }, 3500);
 
     setTimeout(() => {
       const elapsed = (performance.now() - t0).toFixed(0);
