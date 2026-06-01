@@ -124,8 +124,25 @@
       },
     });
 
-    // 안전망: simulation 정착 후 강제 fit
-    setTimeout(() => { try { graph.fitView(700); } catch(e) { console.warn('fitView:', e); } }, 3500);
+    // 핵심 fix: Cosmograph가 init 시 container 사이즈 0으로 잡는 경우 강제 resize
+    function forceResize() {
+      const canvas = container.querySelector('canvas');
+      if (canvas) {
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = container.clientWidth * dpr;
+        canvas.height = container.clientHeight * dpr;
+        canvas.style.width = container.clientWidth + 'px';
+        canvas.style.height = container.clientHeight + 'px';
+      }
+      window.dispatchEvent(new Event('resize'));
+      try { graph.fitView?.(700); } catch(e) {}
+    }
+    requestAnimationFrame(() => requestAnimationFrame(forceResize));
+    setTimeout(forceResize, 500);
+    setTimeout(forceResize, 2000);
+    window.addEventListener('resize', () => {
+      try { graph.fitView?.(300); } catch(e) {}
+    });
 
     setTimeout(() => {
       const elapsed = (performance.now() - t0).toFixed(0);
