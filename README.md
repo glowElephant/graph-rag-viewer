@@ -4,8 +4,9 @@
 
 ## 지식 그래프 뷰어
 
-- **[2D Viewer](https://glowelephant.github.io/graph-rag-viewer/)** — vis-network 기반
-- **[3D Viewer](https://glowelephant.github.io/graph-rag-viewer/3d.html)** — 3d-force-graph 기반 (WebGL)
+- **[2D Viewer (GPU)](https://glowelephant.github.io/graph-rag-viewer/)** — Cosmograph 기반, WebGL2 GPU 가속. 9.5k 노드 / 24k 엣지 부드럽게.
+- **[3D Viewer](https://glowelephant.github.io/graph-rag-viewer/3d.html)** — 3d-force-graph (Three.js)
+- [Legacy 2D (vis-network)](https://glowelephant.github.io/graph-rag-viewer/vis.html) — 백업, 데이터 검증용
 
 ## 이 프로젝트가 하는 일
 
